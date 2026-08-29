@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Liệt kê Số CCCD theo bộ — OCR + Mistral AI</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --ink:#1c2321;
+    --paper:#f6f4ee;
+    --panel:#ffffff;
+    --line:#dcd7c9;
+    --accent:#8a3b2b;
+    --accent2:#2f5f4f; /* xanh — dùng riêng cho khối OCR */
+    --accent-soft:#f1e3dd;
+    --accent2-soft:#e6efe9;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+    --serif: "Source Serif 4", "Times New Roman", serif;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); line-height:1.5;
+    background-image: linear-gradient(var(--line) 1px, transparent 1px);
+    background-size: 100% 32px;
+  }
+  header{ padding:36px 24px 22px; text-align:center; border-bottom:2px solid var(--ink); background:var(--paper); }
+  header .eyebrow{ font-family:var(--mono); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); margin-bottom:8px; }
+  header h1{ font-family:var(--serif); font-weight:600; font-size:clamp(26px,4vw,38px); margin:0 0 8px; }
+  header p{ color:#5b564c; max-width:680px; margin:0 auto; font-size:14.5px;}
+  main{ max-width:960px; margin:0 auto; padding:28px 20px 80px; }
+  .card{ background:var(--panel); border:1px solid var(--line); border-radius:2px; padding:24px; margin-bottom:20px; box-shadow: 0 1px 0 rgba(28,35,33,.03); }
+  .card.ocr{ border-color:#c7d9cf; background:#fbfdfc; }
+  .card h2{ font-family:var(--mono); font-size:13px; letter-spacing:.08em; text-transform:uppercase; margin:0 0 18px; color:var(--ink); display:flex; align-items:center; gap:10px; }
+  .card h2 .num{ display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--ink); color:var(--paper); font-size:11px; font-weight:600; flex-shrink:0; }
+  .card.ocr h2 .num{ background:var(--accent2); }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:12.5px; font-weight:600; margin-bottom:6px; color:#3a362f; }
+  .field .hint{ font-size:12px; color:#8a8578; font-weight:400; margin-top:4px; }
+  input[type=text], input[type=password], input[type=number], select, textarea{
+    width:100%; padding:9px 11px; border:1px solid var(--line); border-radius:2px;
+    background:#fcfbf8; font-size:14px; font-family:var(--sans); color:var(--ink);
+  }
+  input:focus, select:focus, textarea:focus{ outline:2px solid var(--accent); outline-offset:1px; }
+  .row{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .row3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:16px; }
+  .row4{ display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; }
+  @media (max-width:640px){ .row,.row3,.row4{grid-template-columns:1fr 1fr;} }
+
+  .dropzone{ border:2px dashed var(--line); border-radius:2px; padding:28px 16px; text-align:center; cursor:pointer; transition:.15s; background:#fcfbf8; }
+  .dropzone:hover, .dropzone.drag{ border-color:var(--accent); background:var(--accent-soft); }
+  .dropzone .fname{ font-family:var(--mono); font-size:13px; margin-top:8px; color:var(--accent); }
+  .dropzone .instr{ font-size:13.5px; color:#5b564c; }
+
+  button.primary{ width:100%; padding:13px; border:none; border-radius:2px; background:var(--ink); color:var(--paper); font-family:var(--mono); font-size:13px; letter-spacing:.06em; text-transform:uppercase; cursor:pointer; transition:.15s; }
+  button.primary:hover:not(:disabled){ background:var(--accent); }
+  button.primary:disabled{ background:#b9b4a6; cursor:not-allowed; }
+
+  .progress-wrap{ display:none; }
+  .progress-wrap.show{ display:block; }
+  .barbg{ height:6px; background:var(--line); border-radius:4px; overflow:hidden; margin:14px 0 10px; }
+  .barfg{ height:100%; width:0%; background:var(--accent); transition:width .25s; }
+  .status{ font-family:var(--mono); font-size:12.5px; color:#5b564c; }
+  .log{ margin-top:14px; max-height:260px; overflow-y:auto; background:#fcfbf8; border:1px solid var(--line); border-radius:2px; padding:10px 12px; font-family:var(--mono); font-size:12px; white-space:pre-wrap; }
+  .log .err{ color:#a3372a; }
+  .log .ok{ color:#2f6e4b; }
+  .log .ocr{ color:#2f5f4f; }
+
+  .result{ display:none; }
+  .result.show{ display:block; }
+  .result table{ width:100%; border-collapse:collapse; font-size:13px; margin-top:12px;}
+  .result th,.result td{ text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); }
+  .result th{ font-family:var(--mono); font-size:11px; text-transform:uppercase; color:#8a8578; }
+  .badge{ font-family:var(--mono); font-size:10.5px; padding:2px 6px; border-radius:10px; }
+  .badge.ocr{ background:var(--accent2-soft); color:var(--accent2); }
+  .badge.ai{ background:var(--accent-soft); color:var(--accent); }
+  .dl-row{ display:flex; gap:10px; margin-top:16px; flex-wrap:wrap; }
+  .dl-row a{ flex:1; min-width:200px; text-align:center; padding:12px; border-radius:2px; background:var(--accent); color:#fff; text-decoration:none; font-family:var(--mono); font-size:13px; letter-spacing:.04em; }
+  .dl-row a.secondary{ background:none; border:1px solid var(--ink); color:var(--ink); }
+
+  .stamp-preview{ margin-top:10px; display:inline-block; padding:5px 10px; background:var(--ink); color:#fff; font-family:var(--serif); font-size:13px; border-radius:2px; }
+  .warn{ font-size:12px; background:#fbf1e0; border:1px solid #e7c98a; color:#7a5a12; padding:10px 12px; border-radius:2px; margin-top:10px; }
+  .info{ font-size:12px; background:var(--accent2-soft); border:1px solid #b7d2c2; color:#204536; padding:10px 12px; border-radius:2px; margin-bottom:16px; }
+
+  .region-wrap{ display:none; margin-top:6px; }
+  .region-wrap.show{ display:block; }
+  .region-canvas-box{ position:relative; display:inline-block; border:1px solid var(--line); background:#fff; user-select:none; }
+  .region-canvas-box canvas{ display:block; }
+  .region-box{
+    position:absolute; border:2px solid var(--accent2); background:rgba(47,95,79,.16);
+    cursor:move; box-sizing:border-box;
+  }
+  .region-handle{
+    position:absolute; width:12px; height:12px; right:-6px; bottom:-6px;
+    background:var(--accent2); border:2px solid #fff; border-radius:50%; cursor:nwse-resize;
+  }
+  .region-label{
+    position:absolute; top:-20px; left:-2px; font-family:var(--mono); font-size:10.5px;
+    background:var(--accent2); color:#fff; padding:1px 6px; border-radius:2px; white-space:nowrap;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Tesseract OCR (offline) + Mistral Vision</div>
+  <h1>Nhận diện &amp; liệt kê Số CCCD <br> áp dụng cho MẪU 01-MỞ TÀI KHOẢN</h1>
+  <p>Tải lên file PDF hồ sơ gộp nhiều văn bản. Công cụ quét OCR offline một vùng cố định (nơi in
+     "Số: ...") trước — chỉ khi OCR không đọc chắc chắn mới gọi Mistral AI, giúp tiết kiệm token.
+     Số hiệu văn bản (vd "060089013557" từ "Số GTTT") của mỗi văn bản sẽ được liệt kê thành danh
+     sách theo đúng thứ tự từ trên xuống (theo thứ tự trang trong file), không chỉnh sửa gì lên file
+     PDF gốc — bạn có thể tải danh sách này ra file Excel (.xlsx) hoặc CSV.</p>
+</header>
+
+<main>
+
+  <div class="card ocr">
+    <h2><span class="num">A</span>OCR Tesseract (offline, tiết kiệm token)</h2>
+    <div class="info">
+      Đây là trang HTML chạy trong trình duyệt nên <strong>không thể gọi trực tiếp bản Tesseract-OCR
+      đã cài ở <code>C:\Program Files\Tesseract-OCR</code></strong> (trình duyệt không được phép chạy
+      chương trình ngoài vì lý do bảo mật). Thay vào đó công cụ dùng <strong>Tesseract.js</strong> —
+      cùng lõi nhận dạng Tesseract nhưng chạy hoàn toàn cục bộ trong trình duyệt (WebAssembly), vẫn
+      100% offline/miễn phí, không gửi ảnh lên đâu cả. Nếu bạn thật sự cần gọi đúng bản .exe đã cài,
+      cần một công cụ desktop (Python/Node) thay vì trang HTML — báo mình nếu muốn bản đó.
+    </div>
+    <div class="field">
+      <label for="ocrMode">Chế độ nhận diện số CCCD</label>
+      <select id="ocrMode">
+        <option value="hybrid">OCR trước — chỉ gọi Mistral khi OCR không chắc (khuyên dùng)</option>
+        <option value="ocr_only" selected>Chỉ OCR — không gọi Mistral (nhanh nhất, miễn phí, cần vùng quét chuẩn)</option>
+        <option value="mistral_only">Không dùng OCR — luôn gọi Mistral (như bản trước)</option>
+      </select>
+    </div>
+    <div class="row3">
+      <div class="field">
+        <label for="ocrDpi">DPI quét OCR</label>
+        <input type="number" id="ocrDpi" value="300" min="150" max="500" step="10">
+        <div class="hint">Càng cao càng rõ chữ số nhưng càng chậm.</div>
+      </div>
+      <div class="field">
+        <label for="ocrConf">Ngưỡng tin cậy OCR (%)</label>
+        <input type="number" id="ocrConf" value="45" min="0" max="100" step="5">
+        <div class="hint">Dưới ngưỡng này → coi là "không chắc" → dùng Mistral (nếu chế độ hybrid).</div>
+      </div>
+      <div class="field">
+        <label for="ocrLang">Ngôn ngữ OCR</label>
+        <select id="ocrLang">
+          <option value="vie" selected>Tiếng Việt (vie)</option>
+          <option value="vie+eng">Tiếng Việt + Anh (vie+eng, chậm hơn)</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="boundaryMode">Cách xác định trang bắt đầu mỗi văn bản</label>
+      <select id="boundaryMode">
+        <option value="auto" selected>Tự động — quét OCR/AI toàn bộ trang để phát hiện văn bản mới</option>
+        <option value="manual_interval">Thủ công — các văn bản cách đều nhau (vd mỗi văn bản luôn 6 trang)</option>
+        <option value="manual_list">Thủ công — tự nhập danh sách trang bắt đầu</option>
+      </select>
+      <div class="hint">Nếu bạn đã biết chắc quy luật phân trang (vd file 50 trang, mỗi văn bản luôn 6
+        trang → trang bắt đầu là 1, 7, 13, 19...), chọn chế độ thủ công: công cụ sẽ chỉ quét OCR/Mistral
+        đúng các trang bắt đầu đó để đọc số hiệu, nhanh và tiết kiệm hơn nhiều so với quét toàn bộ trang.</div>
+    </div>
+    <div class="row" id="manualIntervalWrap" style="display:none;">
+      <div class="field">
+        <label for="firstStartPage">Trang bắt đầu văn bản đầu tiên</label>
+        <input type="number" id="firstStartPage" value="1" min="1" step="1">
+      </div>
+      <div class="field">
+        <label for="pagesPerDoc">Số trang mỗi văn bản (khoảng cách)</label>
+        <input type="number" id="pagesPerDoc" value="6" min="1" step="1">
+        <div class="hint">Vd: bắt đầu=1, khoảng cách=6 → trang bắt đầu là 1, 7, 13, 19, 25...</div>
+      </div>
+    </div>
+    <div class="field" id="manualListWrap" style="display:none;">
+      <label for="manualPageList">Danh sách trang bắt đầu (cách nhau bởi dấu phẩy)</label>
+      <input type="text" id="manualPageList" placeholder="vd: 1,7,13,19,25,33">
+      <div class="hint">Nhập số trang (đếm từ 1) của trang đầu mỗi văn bản, cách nhau bằng dấu phẩy. Nếu
+        danh sách không bắt đầu từ trang 1, các trang trước trang đầu tiên trong danh sách sẽ được coi là
+        một văn bản riêng (không có số vì không quét).</div>
+    </div>
+    <div class="field" id="manualPreviewWrap" style="display:none;">
+      <div class="hint" id="manualPreviewText" style="font-family:var(--mono);"></div>
+    </div>
+
+    <div class="field">
+      <label>Vùng quét cố định (chứa dòng "Số: ...")</label>
+      <div class="hint">Tải PDF ở mục B trước, sau đó kéo/thả và kéo góc dưới-phải của khung xanh
+        để khoanh đúng vùng in "Số: ..." trên trang 1 — vùng này sẽ được áp dụng cho mọi trang.</div>
+      <div class="region-wrap" id="regionWrap">
+        <div class="region-canvas-box" id="regionCanvasBox">
+          <canvas id="regionCanvas"></canvas>
+          <div class="region-box" id="regionBox">
+            <div class="region-label">vùng quét "Số:"</div>
+            <div class="region-handle" id="regionHandle"></div>
+          </div>
+        </div>
+      </div>
+      <div class="row4" style="margin-top:12px;">
+        <div class="field"><label for="regX">X (%)</label><input type="number" id="regX" value="5" min="0" max="99" step="1"></div>
+        <div class="field"><label for="regY">Y (%)</label><input type="number" id="regY" value="6" min="0" max="99" step="1"></div>
+        <div class="field"><label for="regW">Rộng (%)</label><input type="number" id="regW" value="55" min="1" max="100" step="1"></div>
+        <div class="field"><label for="regH">Cao (%)</label><input type="number" id="regH" value="12" min="1" max="100" step="1"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2><span class="num">B</span>File PDF &amp; Mistral API Key</h2>
+    <div class="dropzone" id="dropzone">
+      <div class="instr">Kéo-thả file PDF vào đây, hoặc bấm để chọn file</div>
+      <div class="fname" id="fname"></div>
+      <input type="file" id="fileInput" accept="application/pdf" style="display:none;">
+    </div>
+    <div class="field" style="margin-top:16px;">
+      <label for="apiKey">Mistral API Key <span style="font-weight:400; color:#8a8578;">(chỉ cần nếu dùng chế độ hybrid/mistral_only)</span></label>
+      <input type="password" id="apiKey" placeholder="dán API key tại đây (console.mistral.ai)">
+      <div class="hint">Key chỉ lưu trong bộ nhớ trình duyệt, gửi trực tiếp đến api.mistral.ai. Không cần nhập nếu dùng chế độ "Chỉ OCR".</div>
+    </div>
+    <div class="row3">
+      <div class="field">
+        <label for="model">Model (Vision)</label>
+        <select id="model">
+          <option value="mistral-small-latest" selected>mistral-small-latest</option>
+          <option value="pixtral-large-latest">pixtral-large-latest</option>
+          <option value="mistral-medium-latest">mistral-medium-latest</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="dpi">DPI render trang (gửi Mistral)</label>
+        <input type="number" id="dpi" value="200" min="100" max="400" step="10">
+      </div>
+      <div class="field">
+        <label for="delay">Nghỉ giữa các lần gọi Mistral (giây)</label>
+        <input type="number" id="delay" value="1" min="0" step="0.5">
+        <div class="hint">Chỉ áp dụng cho trang thực sự gọi Mistral.</div>
+      </div>
+    </div>
+  </div>
+
+  <button class="primary" id="startBtn" disabled>Bắt đầu nhận diện</button>
+
+  <div class="card progress-wrap" id="progressWrap">
+    <h2><span class="num">✓</span>Tiến trình</h2>
+    <div class="status" id="statusLine">Đang chờ...</div>
+    <div class="barbg"><div class="barfg" id="barfg"></div></div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div class="card result" id="resultCard">
+    <h2><span class="num">↓</span>Kết quả</h2>
+    <div id="resultSummary" class="status"></div>
+    <table id="resultTable">
+      <thead><tr><th>#</th><th>Trang</th><th>Số văn bản</th><th>Số hiệu đầy đủ</th><th>Nguồn</th><th>Tiêu đề</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <div class="dl-row">
+      <a id="dlXlsx" download>Tải danh sách Excel (.xlsx)</a>
+      <a id="dlCsv" class="secondary" download>Tải log CSV</a>
+    </div>
+  </div>
+
+</main>
+
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+// ---------- UI refs ----------
+const dropzone   = document.getElementById('dropzone');
+const fileInput  = document.getElementById('fileInput');
+const fnameEl    = document.getElementById('fname');
+const startBtn   = document.getElementById('startBtn');
+const progressWrap = document.getElementById('progressWrap');
+const statusLine = document.getElementById('statusLine');
+const barfg      = document.getElementById('barfg');
+const logEl      = document.getElementById('log');
+const resultCard = document.getElementById('resultCard');
+const resultSummary = document.getElementById('resultSummary');
+const resultTbody = document.querySelector('#resultTable tbody');
+const dlXlsx = document.getElementById('dlXlsx');
+const dlCsv = document.getElementById('dlCsv');
+
+const regionWrap = document.getElementById('regionWrap');
+const regionCanvas = document.getElementById('regionCanvas');
+const regionCanvasBox = document.getElementById('regionCanvasBox');
+const regionBox = document.getElementById('regionBox');
+const regionHandle = document.getElementById('regionHandle');
+const regX = document.getElementById('regX'), regY = document.getElementById('regY');
+const regW = document.getElementById('regW'), regH = document.getElementById('regH');
+
+const boundaryModeSel = document.getElementById('boundaryMode');
+const manualIntervalWrap = document.getElementById('manualIntervalWrap');
+const manualListWrap = document.getElementById('manualListWrap');
+const manualPreviewWrap = document.getElementById('manualPreviewWrap');
+const manualPreviewText = document.getElementById('manualPreviewText');
+const firstStartPageInp = document.getElementById('firstStartPage');
+const pagesPerDocInp = document.getElementById('pagesPerDoc');
+const manualPageListInp = document.getElementById('manualPageList');
+
+let pdfArrayBuffer = null;
+let pdfFileName = "document.pdf";
+let loadedNumPages = null;
+let ocrRegion = { x: 0.05, y: 0.06, w: 0.55, h: 0.12 }; // fractions of page
+
+// ---------- Chế độ chọn trang bắt đầu thủ công ----------
+function computeManualStartPages(nPages, boundaryMode) {
+  let pages = [];
+  if (boundaryMode === 'manual_interval') {
+    const start = Math.max(1, parseInt(firstStartPageInp.value, 10) || 1);
+    const step = Math.max(1, parseInt(pagesPerDocInp.value, 10) || 1);
+    const limit = nPages || start + step * 20; // ước lượng khi chưa có nPages thật (preview)
+    for (let p = start; p <= limit; p += step) pages.push(p);
+  } else if (boundaryMode === 'manual_list') {
+    pages = manualPageListInp.value.split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => Number.isFinite(n) && n >= 1);
+    pages = [...new Set(pages)].sort((a, b) => a - b);
+  }
+  if (nPages) pages = pages.filter(p => p <= nPages);
+  if (!pages.length || pages[0] !== 1) pages = [1, ...pages.filter(p => p !== 1)];
+  return pages;
+}
+
+function updateManualUI() {
+  const mode = boundaryModeSel.value;
+  manualIntervalWrap.style.display = mode === 'manual_interval' ? '' : 'none';
+  manualListWrap.style.display = mode === 'manual_list' ? '' : 'none';
+  manualPreviewWrap.style.display = mode === 'auto' ? 'none' : '';
+  if (mode === 'auto') return;
+  const pages = computeManualStartPages(loadedNumPages, mode);
+  const shown = pages.slice(0, 25).join(', ') + (pages.length > 25 ? '…' : '');
+  manualPreviewText.textContent = loadedNumPages
+    ? `→ ${pages.length} văn bản, trang bắt đầu: ${shown} (trên tổng ${loadedNumPages} trang)`
+    : `→ Trang bắt đầu (ước tính, sẽ tính lại đúng theo số trang thật khi chạy): ${shown}`;
+}
+[boundaryModeSel, firstStartPageInp, pagesPerDocInp, manualPageListInp].forEach(el =>
+  el.addEventListener('input', updateManualUI));
+updateManualUI();
+
+// ---------- File loading ----------
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('drag'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('drag'));
+dropzone.addEventListener('drop', e => { e.preventDefault(); dropzone.classList.remove('drag'); if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', e => { if (e.target.files.length) handleFile(e.target.files[0]); });
+
+async function handleFile(file) {
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) { alert('Vui lòng chọn file PDF.'); return; }
+  pdfFileName = file.name;
+  pdfArrayBuffer = await file.arrayBuffer();
+  fnameEl.textContent = `${file.name} (${(file.size/1024).toFixed(0)} KB)`;
+  startBtn.disabled = false;
+  await renderRegionPreview();
+}
+
+// ---------- Vùng quét: xem trước trang 1 + kéo-thả khung ----------
+async function renderRegionPreview() {
+  try {
+    const buf = pdfArrayBuffer.slice(0);
+    const doc = await pdfjsLib.getDocument({ data: buf }).promise;
+    loadedNumPages = doc.numPages;
+    updateManualUI();
+    const page = await doc.getPage(1);
+    const baseVp = page.getViewport({ scale: 1 });
+    const PREVIEW_W = 480;
+    const scale = PREVIEW_W / baseVp.width;
+    const vp = page.getViewport({ scale });
+    regionCanvas.width = vp.width;
+    regionCanvas.height = vp.height;
+    const ctx = regionCanvas.getContext('2d');
+    await page.render({ canvasContext: ctx, viewport: vp }).promise;
+    regionWrap.classList.add('show');
+    syncBoxFromFraction();
+  } catch (e) {
+    console.warn('Không tạo được ảnh xem trước vùng quét:', e);
+  }
+}
+
+function syncBoxFromFraction() {
+  const w = regionCanvas.width, h = regionCanvas.height;
+  regionBox.style.left = (ocrRegion.x * w) + 'px';
+  regionBox.style.top = (ocrRegion.y * h) + 'px';
+  regionBox.style.width = (ocrRegion.w * w) + 'px';
+  regionBox.style.height = (ocrRegion.h * h) + 'px';
+  regX.value = Math.round(ocrRegion.x * 100);
+  regY.value = Math.round(ocrRegion.y * 100);
+  regW.value = Math.round(ocrRegion.w * 100);
+  regH.value = Math.round(ocrRegion.h * 100);
+}
+
+function syncFractionFromBox() {
+  const w = regionCanvas.width, h = regionCanvas.height;
+  const left = parseFloat(regionBox.style.left) || 0;
+  const top = parseFloat(regionBox.style.top) || 0;
+  const bw = parseFloat(regionBox.style.width) || 10;
+  const bh = parseFloat(regionBox.style.height) || 10;
+  ocrRegion = { x: left / w, y: top / h, w: bw / w, h: bh / h };
+  regX.value = Math.round(ocrRegion.x * 100);
+  regY.value = Math.round(ocrRegion.y * 100);
+  regW.value = Math.round(ocrRegion.w * 100);
+  regH.value = Math.round(ocrRegion.h * 100);
+}
+
+// kéo để di chuyển khung
+let dragState = null;
+regionBox.addEventListener('mousedown', e => {
+  if (e.target === regionHandle) return;
+  e.preventDefault();
+  dragState = { mode: 'move', startX: e.clientX, startY: e.clientY, left: parseFloat(regionBox.style.left)||0, top: parseFloat(regionBox.style.top)||0 };
+});
+regionHandle.addEventListener('mousedown', e => {
+  e.preventDefault(); e.stopPropagation();
+  dragState = { mode: 'resize', startX: e.clientX, startY: e.clientY, width: parseFloat(regionBox.style.width)||10, height: parseFloat(regionBox.style.height)||10 };
+});
+document.addEventListener('mousemove', e => {
+  if (!dragState) return;
+  const cw = regionCanvas.width, ch = regionCanvas.height;
+  const dx = e.clientX - dragState.startX, dy = e.clientY - dragState.startY;
+  if (dragState.mode === 'move') {
+    let left = Math.min(Math.max(dragState.left + dx, 0), cw - parseFloat(regionBox.style.width));
+    let top = Math.min(Math.max(dragState.top + dy, 0), ch - parseFloat(regionBox.style.height));
+    regionBox.style.left = left + 'px'; regionBox.style.top = top + 'px';
+  } else if (dragState.mode === 'resize') {
+    const left = parseFloat(regionBox.style.left) || 0, top = parseFloat(regionBox.style.top) || 0;
+    let width = Math.min(Math.max(dragState.width + dx, 20), cw - left);
+    let height = Math.min(Math.max(dragState.height + dy, 14), ch - top);
+    regionBox.style.width = width + 'px'; regionBox.style.height = height + 'px';
+  }
+});
+document.addEventListener('mouseup', () => { if (dragState) { syncFractionFromBox(); dragState = null; } });
+
+[regX, regY, regW, regH].forEach(inp => inp.addEventListener('change', () => {
+  ocrRegion = {
+    x: (parseFloat(regX.value)||0) / 100,
+    y: (parseFloat(regY.value)||0) / 100,
+    w: (parseFloat(regW.value)||10) / 100,
+    h: (parseFloat(regH.value)||10) / 100
+  };
+  syncBoxFromFraction();
+}));
+
+startBtn.addEventListener('click', run);
+
+function log(msg, cls) {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = msg;
+  logEl.appendChild(line);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ---------- OCR: nhận diện "Số: ..." trong vùng cố định ----------
+function normalizeNoDiacritics(s) {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function parseSoFromOcrText(rawText) {
+  if (!rawText) return { found: false };
+  const norm = normalizeNoDiacritics(rawText);
+
+  // Mẫu 1: "so gttt" theo sau bởi dấu hai chấm/gạch (tuỳ chọn) và số GTTT 12 chữ số
+  let m = norm.match(/\bso\s*gttt\b\s*[:.\-]?\s*([0-9]{12})\b([^\n\r]*)/i);
+
+  if (!m) {
+    // Mẫu 2 (fallback): chuỗi 12 chữ số đứng độc lập, bắt đầu bằng số 0
+    // (dùng khi OCR không nhận ra được nhãn "Số GTTT")
+    m = norm.match(/\b(0[0-9]{11})\b([^\n\r]*)/);
+  }
+
+  if (!m) return { found: false };
+
+  const so = m[1];                     // 12 chữ số, vd: "060089013557"
+  const rest = (m[2] || "").trim();    // phần còn lại: "Ngày cấp ... Nơi cấp ..."
+  const full = rest ? `${so} ${rest}` : so;
+
+  return { found: true, so, full };
+}
+
+function cropCanvasByFraction(sourceCanvas, region) {
+  const sw = Math.max(1, Math.round(sourceCanvas.width * region.w));
+  const sh = Math.max(1, Math.round(sourceCanvas.height * region.h));
+  const sx = Math.round(sourceCanvas.width * region.x);
+  const sy = Math.round(sourceCanvas.height * region.y);
+  const out = document.createElement('canvas');
+  out.width = sw; out.height = sh;
+  out.getContext('2d').drawImage(sourceCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
+  return out;
+}
+
+// ---------- Prompt cho Mistral (fallback) ----------
+function buildPrompt(prevSo, hasPrevImage) {
+  const anhNote = hasPrevImage
+    ? `Bạn được cung cấp 2 ẢNH: ẢNH THỨ NHẤT là TRANG TRƯỚC, ẢNH THỨ HAI là TRANG ĐANG XÉT. Hãy so
+sánh trực quan bố cục, phông chữ, và số hiệu văn bản giữa 2 ảnh để quyết định trang đang xét có phải
+TIẾP NỐI của văn bản ở ảnh trước hay là một văn bản HOÀN TOÀN MỚI.`
+    : `Đây là TRANG ĐẦU TIÊN của file (không có trang trước để so sánh), chỉ có 1 ảnh duy nhất.`;
+
+  return `Bạn đang xem ảnh chụp/scan (các) trang trong bộ hồ sơ công văn/văn bản hành chính tiếng Việt.
+
+${anhNote}
+
+NHIỆM VỤ: tìm dòng "Số GTTT" (số GTTT gồm 12 số, ví dụ "Số GTTT 060089013557") ở phần đầu trang. Đây LÀ
+số hiệu GTTT chính thức.
+
+QUY TẮC XÁC ĐỊNH VĂN BẢN MỚI (is_new_document_start):
+- TRUE nếu trang có chữ MS01/PL2 ở góc trên cùng, bên phải.
+- FALSE nếu trang KHÔNG có chữ MS01/PL2 ở góc trên cùng, bên phải.
+
+Số GTTT của trang trước (nếu có): ${prevSo || "(không có, đây là trang đầu tiên)"}
+
+Hãy trả lời DUY NHẤT một object JSON (không thêm chữ nào khác, không dùng markdown fences):
+{
+  "is_new_document_start": true hoặc false,
+  "so_van_ban_full": "toàn bộ chuỗi đọc được sau chữ 'Số GTTT', ví dụ '008173002381 Ngày cấp 5/1/2021 Ngày hết hạn 5/1/2021 Nơi cấp Cục cảnh sát QLHC về TTXH'; để chuỗi rỗng nếu không đọc được",
+  "so_van_ban_so": "CHỈ 12 số, bắt đầu bằng số 0, đứng giữa 2 khoảng trống, ví dụ '060089013557'; để chuỗi rỗng nếu không có",
+  "title": "Số GTTT"
+}`;
+}
+
+function extractNumericPrefix(s) {
+  if (!s) return "";
+  const m = String(s).trim().match(/^(\d+)/);
+  return m ? m[1] : "";
+}
+function safeJsonParse(text) {
+  let t = text.trim();
+  t = t.replace(/^```json\s*/i, "").replace(/^```\s*/, "").replace(/```\s*$/, "");
+  const start = t.indexOf('{'); const end = t.lastIndexOf('}');
+  if (start >= 0 && end > start) t = t.substring(start, end + 1);
+  return JSON.parse(t);
+}
+
+async function callMistral(apiKey, model, imgB64, prevImgB64, prevSo, attempts = 5) {
+  const hasPrev = !!prevImgB64;
+  const prompt = buildPrompt(prevSo, hasPrev);
+  const content = [{ type: "text", text: prompt }];
+  if (hasPrev) {
+    content.push({ type: "text", text: "== ẢNH 1: TRANG TRƯỚC ==" });
+    content.push({ type: "image_url", image_url: `data:image/png;base64,${prevImgB64}` });
+    content.push({ type: "text", text: "== ẢNH 2: TRANG ĐANG XÉT ==" });
+    content.push({ type: "image_url", image_url: `data:image/png;base64,${imgB64}` });
+  } else {
+    content.push({ type: "image_url", image_url: `data:image/png;base64,${imgB64}` });
+  }
+  const body = {
+    model, temperature: 0, max_tokens: 400, response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: "Bạn là trợ lý đọc văn bản scan. Chỉ trả lời bằng JSON hợp lệ theo đúng schema được yêu cầu." },
+      { role: "user", content }
+    ]
+  };
+  for (let i = 0; i < attempts; i++) {
+    let resp;
+    try {
+      resp = await fetch("https://api.mistral.ai/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
+        body: JSON.stringify(body)
+      });
+    } catch (netErr) {
+      throw new Error(`Không gọi được api.mistral.ai (lỗi mạng hoặc bị chặn CORS): ${netErr.message}`);
+    }
+    if (resp.status === 429) { log(`    [!] Vượt quota/rate limit (429), lần ${i+1}/${attempts}. Đợi 20s...`); await sleep(20000); continue; }
+    if (resp.status === 401) throw new Error("API key không hợp lệ hoặc hết hạn (401).");
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => "");
+      log(`    [!] Lỗi HTTP ${resp.status} lần ${i+1}/${attempts}: ${errText.slice(0,200)}. Thử lại sau 5s...`, 'err');
+      await sleep(5000); continue;
+    }
+    const data = await resp.json();
+    const raw = data?.choices?.[0]?.message?.content ?? "";
+    try {
+      const parsed = safeJsonParse(raw);
+      if (!parsed.so_van_ban_so && parsed.so_van_ban_full) parsed.so_van_ban_so = extractNumericPrefix(parsed.so_van_ban_full);
+      return parsed;
+    } catch (parseErr) {
+      log(`    [!] Không parse được JSON trả về, lần ${i+1}/${attempts}. Thử lại...`, 'err');
+      await sleep(2000);
+    }
+  }
+  log(`    [!] Vẫn lỗi sau nhiều lần thử — tạm coi là tiếp nối trang trước.`, 'err');
+  return { is_new_document_start: false, so_van_ban_full: "", so_van_ban_so: "", title: "" };
+}
+
+// ---------- Render trang PDF ----------
+async function renderPageToCanvas(pdfDocJs, pageNum, dpi) {
+  const page = await pdfDocJs.getPage(pageNum);
+  const scale = dpi / 72;
+  const viewport = page.getViewport({ scale });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  const ctx = canvas.getContext('2d');
+  await page.render({ canvasContext: ctx, viewport }).promise;
+  return canvas;
+}
+function canvasToB64(canvas) { return canvas.toDataURL('image/png').split(',')[1]; }
+
+// ---------- Gom trang thành văn bản ----------
+function groupPagesIntoDocuments(pageInfos) {
+  const docs = [];
+  let current = null;
+  pageInfos.forEach((info, i) => {
+    if (info.is_new_document_start || current === null) {
+      if (current !== null) docs.push(current);
+      current = { start: i, end: i, so_van_ban_so: info.so_van_ban_so || "", so_van_ban_full: info.so_van_ban_full || "", title: info.title || "" };
+    } else {
+      current.end = i;
+      if (!current.so_van_ban_so && info.so_van_ban_so) current.so_van_ban_so = info.so_van_ban_so;
+      if (!current.so_van_ban_full && info.so_van_ban_full) current.so_van_ban_full = info.so_van_ban_full;
+      if (!current.title && info.title) current.title = info.title;
+    }
+  });
+  if (current !== null) docs.push(current);
+  return docs;
+}
+
+// ---------- Chạy toàn bộ ----------
+async function run() {
+  const ocrMode = document.getElementById('ocrMode').value; // hybrid | ocr_only | mistral_only
+  const ocrDpi = parseInt(document.getElementById('ocrDpi').value, 10) || 300;
+  const ocrConf = parseFloat(document.getElementById('ocrConf').value) || 45;
+  const ocrLang = document.getElementById('ocrLang').value;
+  const boundaryMode = document.getElementById('boundaryMode').value; // auto | manual_interval | manual_list
+
+  const apiKey = document.getElementById('apiKey').value.trim();
+  const model = document.getElementById('model').value;
+  const dpi = parseInt(document.getElementById('dpi').value, 10) || 200;
+  const delaySec = parseFloat(document.getElementById('delay').value) || 0;
+
+  const needsMistral = ocrMode !== 'ocr_only';
+  if (needsMistral && !apiKey) { alert('Chế độ này có thể cần gọi Mistral — vui lòng nhập API key (hoặc chuyển sang chế độ "Chỉ OCR").'); return; }
+  if (!pdfArrayBuffer) { alert('Vui lòng chọn file PDF.'); return; }
+
+  startBtn.disabled = true;
+  progressWrap.classList.add('show');
+  resultCard.classList.remove('show');
+  logEl.innerHTML = '';
+  barfg.style.width = '0%';
+
+  let worker = null;
+  try {
+    const bufferForRender = pdfArrayBuffer.slice(0);
+
+    const pdfDocJs = await pdfjsLib.getDocument({ data: bufferForRender }).promise;
+    const nPages = pdfDocJs.numPages;
+    statusLine.textContent = `Tổng số trang: ${nPages}`;
+    log(`Tổng số trang: ${nPages}`);
+
+    if (ocrMode !== 'mistral_only') {
+      log(`Đang khởi tạo Tesseract.js (${ocrLang})... (lần đầu có thể mất chút thời gian để tải dữ liệu ngôn ngữ)`);
+      worker = await Tesseract.createWorker(ocrLang, 1, {
+        logger: () => {} // tắt log chi tiết của Tesseract để log gọn
+      });
+      log('Tesseract.js sẵn sàng.', 'ocr');
+    }
+
+    const renderDpi = ocrMode !== 'mistral_only' ? Math.max(dpi, ocrDpi) : dpi;
+
+    let mistralCalls = 0, ocrHits = 0;
+
+    // ---- Đọc số hiệu văn bản trên MỘT trang cụ thể (dùng chung cho cả 2 chế độ) ----
+    async function readSoOnPage(pageNum, prevSo, prevImgB64, compareWithPrev) {
+      const fullCanvas = await renderPageToCanvas(pdfDocJs, pageNum, renderDpi);
+      let info = null;
+      let source = 'mistral';
+
+      if (ocrMode !== 'mistral_only') {
+        const cropCanvas = cropCanvasByFraction(fullCanvas, ocrRegion);
+        const { data } = await worker.recognize(cropCanvas);
+        const conf = data.confidence ?? 0;
+        const ocrResult = parseSoFromOcrText(data.text);
+        log(`Trang ${pageNum}: OCR đọc được "${(data.text||'').replace(/\s+/g,' ').trim().slice(0,60)}" (tin cậy ${conf.toFixed(0)}%)`, 'ocr');
+
+        if (ocrResult.found && conf >= ocrConf) {
+          ocrHits++;
+          const isContinuation = compareWithPrev && prevSo && ocrResult.so === prevSo;
+          info = {
+            is_new_document_start: !isContinuation,
+            so_van_ban_so: ocrResult.so,
+            so_van_ban_full: ocrResult.full,
+            title: ""
+          };
+          source = 'ocr';
+          log(`  -> OCR nhận diện số "${ocrResult.so}"${compareWithPrev ? (isContinuation ? ' (trùng số trang trước, coi là tiếp nối)' : ' (văn bản mới)') : ''}`, 'ok');
+        } else if (ocrMode === 'ocr_only') {
+          info = { is_new_document_start: false, so_van_ban_so: prevSo || "", so_van_ban_full: "", title: "" };
+          source = 'ocr';
+          log(`  -> OCR không đọc chắc, chế độ "Chỉ OCR" nên bỏ qua Mistral.`);
+        }
+      }
+
+      let imgB64ForNext = null;
+      if (info === null) {
+        // hybrid fallback hoặc mistral_only
+        mistralCalls++;
+        log(`  -> Gọi Mistral cho trang ${pageNum}...`);
+        const imgB64 = canvasToB64(fullCanvas);
+        info = await callMistral(apiKey, model, imgB64, compareWithPrev ? prevImgB64 : null, prevSo);
+        imgB64ForNext = imgB64;
+        log(`  -> Mistral: số="${info.so_van_ban_so || '(trống)'}"`, 'ok');
+        if (delaySec > 0) await sleep(delaySec * 1000);
+      } else if (compareWithPrev) {
+        imgB64ForNext = canvasToB64(fullCanvas); // giữ ảnh trang trước phòng khi trang sau cần fallback Mistral
+      }
+
+      return { info, source, imgB64ForNext };
+    }
+
+    let documents = [];
+
+    if (boundaryMode === 'auto') {
+      // ---- Chế độ tự động: quét toàn bộ trang để phát hiện ranh giới văn bản (như bản gốc) ----
+      const pageInfos = [];
+      let prevSo = null, prevImgB64 = null;
+      for (let i = 1; i <= nPages; i++) {
+        statusLine.textContent = `Đang xử lý trang ${i}/${nPages}...`;
+        const { info, source, imgB64ForNext } = await readSoOnPage(i, prevSo, prevImgB64, true);
+        info._source = source;
+        pageInfos.push(info);
+        prevImgB64 = imgB64ForNext ?? prevImgB64;
+        prevSo = info.so_van_ban_so || info.so_van_ban_full || prevSo;
+        barfg.style.width = `${Math.round((i / nPages) * 70)}%`;
+      }
+      documents = groupPagesIntoDocuments(pageInfos).map(d => ({ ...d, source: pageInfos[d.start]._source }));
+      log(`\nPhát hiện ${documents.length} văn bản riêng biệt.`);
+    } else {
+      // ---- Chế độ thủ công: chỉ quét đúng các trang bắt đầu do người dùng chỉ định ----
+      const startPages = computeManualStartPages(nPages, boundaryMode);
+      log(`Chế độ thủ công: chỉ quét ${startPages.length} trang bắt đầu (${startPages.join(', ')}), bỏ qua các trang còn lại.`);
+      let prevSo = null;
+      for (let idx = 0; idx < startPages.length; idx++) {
+        const startP = startPages[idx];
+        const endP = (idx + 1 < startPages.length) ? startPages[idx + 1] - 1 : nPages;
+        statusLine.textContent = `Đang xử lý văn bản ${idx + 1}/${startPages.length} (trang ${startP})...`;
+        const { info, source } = await readSoOnPage(startP, prevSo, null, false);
+        documents.push({
+          start: startP - 1,
+          end: endP - 1,
+          so_van_ban_so: info.so_van_ban_so || "",
+          so_van_ban_full: info.so_van_ban_full || "",
+          title: info.title || "",
+          source
+        });
+        prevSo = info.so_van_ban_so || info.so_van_ban_full || prevSo;
+        barfg.style.width = `${Math.round(((idx + 1) / startPages.length) * 70)}%`;
+      }
+      log(`\nĐã chia thành ${documents.length} văn bản theo trang chỉ định.`);
+    }
+
+    if (worker) await worker.terminate();
+
+    log(`Tổng kết: ${ocrHits} trang đọc được bằng OCR (offline), ${mistralCalls} lần gọi Mistral.`, 'ok');
+    statusLine.textContent = `Đang tổng hợp danh sách ${documents.length} văn bản...`;
+    barfg.style.width = '90%';
+
+    // ---- Không chỉnh sửa gì lên file PDF gốc — chỉ liệt kê kết quả theo đúng thứ tự từ trên xuống ----
+    const rows = documents.map((d, idx) => ({
+      stt: idx + 1,
+      trang: `${d.start + 1}-${d.end + 1}`,
+      so: d.so_van_ban_so || "",
+      so_full: d.so_van_ban_full || "",
+      title: d.title || "",
+      source: d.source
+    }));
+
+    // ---- Xuất Excel (.xlsx) ----
+    const xlsxHeader = ['STT', 'Trang', 'Số văn bản', 'Số hiệu đầy đủ', 'Nguồn', 'Tiêu đề'];
+    const xlsxData = [xlsxHeader, ...rows.map(r => [r.stt, r.trang, r.so, r.so_full, r.source === 'ocr' ? 'OCR' : 'Mistral', r.title])];
+    const ws = XLSX.utils.aoa_to_sheet(xlsxData);
+    ws['!cols'] = [{wch:5},{wch:10},{wch:14},{wch:24},{wch:10},{wch:40}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'So van ban');
+    const xlsxOutName = pdfFileName.replace(/\.pdf$/i, '') + '_danh_sach_so_van_ban.xlsx';
+    const xlsxArrayBuf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    const xlsxBlob = new Blob([xlsxArrayBuf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const xlsxUrl = URL.createObjectURL(xlsxBlob);
+    dlXlsx.href = xlsxUrl; dlXlsx.download = xlsxOutName; dlXlsx.textContent = `Tải ${xlsxOutName}`;
+
+    // ---- Xuất CSV (log chi tiết) ----
+    const csvHeader = 'stt,trang,so_van_ban,so_van_ban_day_du,nguon,tieu_de\n';
+    const csvBody = rows.map(r => [r.stt, r.trang, r.so, r.so_full, r.source, (r.title || '').replace(/"/g,'""')].map(v => `"${v}"`).join(',')).join('\n');
+    const csvBlob = new Blob(["\uFEFF" + csvHeader + csvBody], { type: 'text/csv;charset=utf-8' });
+    const csvUrl = URL.createObjectURL(csvBlob);
+    const csvName = pdfFileName.replace(/\.pdf$/i, '') + '_log_so_van_ban.csv';
+    dlCsv.href = csvUrl; dlCsv.download = csvName; dlCsv.textContent = `Tải ${csvName}`;
+
+    resultTbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      const badge = r.source === 'ocr' ? '<span class="badge ocr">OCR</span>' : '<span class="badge ai">Mistral</span>';
+      tr.innerHTML = `<td>${r.stt}</td><td>${r.trang}</td><td>${r.so || '—'}</td><td>${escapeHtml(r.so_full)}</td><td>${badge}</td><td>${escapeHtml(r.title)}</td>`;
+      resultTbody.appendChild(tr);
+    });
+    resultSummary.textContent = boundaryMode === 'auto'
+      ? `${documents.length} văn bản · ${rows.filter(r=>r.so).length} đọc được số · ${ocrHits}/${nPages} trang dùng OCR · ${mistralCalls}/${nPages} trang gọi Mistral`
+      : `${documents.length} văn bản (theo trang chỉ định) · ${rows.filter(r=>r.so).length} đọc được số · ${ocrHits} trang dùng OCR · ${mistralCalls} lần gọi Mistral`;
+    resultCard.classList.add('show');
+
+    barfg.style.width = '100%';
+    statusLine.textContent = 'Hoàn tất.';
+    log('\nHoàn tất. Kiểm tra lại bảng kết quả, sau đó tải file Excel hoặc CSV.', 'ok');
+  } catch (err) {
+    log(`[LỖI] ${err.message}`, 'err');
+    statusLine.textContent = 'Đã dừng do lỗi.';
+    if (worker) { try { await worker.terminate(); } catch(e){} }
+  } finally {
+    startBtn.disabled = false;
+  }
+}
+
+function escapeHtml(s) { return (s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+</script>
+</body>
+</html>
