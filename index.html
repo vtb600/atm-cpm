@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATM All-in-One Tools</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --primary-dark: #1d4ed8;
+            --primary-light: #3b82f6;
+            --bg: #eef1f6;
+            --card: #ffffff;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --border: #cbd5e1;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .header h1 {
+            font-size: 1.4rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            font-size: 0.85rem;
+            opacity: 0.9;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 0.5rem;
+            padding: 0.75rem 1.5rem;
+            background: var(--card);
+            border-bottom: 2px solid var(--border);
+            flex-wrap: wrap;
+        }
+
+        .tab-btn {
+            padding: 0.6rem 1.25rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.92rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tab-btn:hover {
+            border-color: var(--primary-light);
+            color: var(--primary);
+        }
+
+        .tab-btn.active {
+            background: var(--primary);
+            border-color: var(--primary);
+            color: white;
+        }
+
+        .tab-btn .tab-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            font-size: 0.72rem;
+            font-weight: 700;
+        }
+
+        .tab-btn.active .tab-num {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        /* Content */
+        main {
+            flex: 1;
+            min-height: 0;
+        }
+
+        .tab-panel {
+            display: none;
+            height: 100%;
+        }
+
+        .tab-panel.active {
+            display: block;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: 0;
+            display: block;
+            background: var(--bg);
+        }
+
+        @media (max-width: 768px) {
+            .header h1 {
+                font-size: 1.15rem;
+            }
+
+            .tabs {
+                padding: 0.6rem 0.75rem;
+            }
+
+            .tab-btn {
+                padding: 0.5rem 0.9rem;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header class="header">
+        <h1>ATM All-in-One Tools vibecode by toanbx </h1>
+        <p>Trích xuất dữ liệu CCCD/SMS | Chuyển không dấu & tách địa chỉ | Chụp ảnh PDF</p>
+    </header>
+
+    <nav class="tabs">
+        <button class="tab-btn active" data-tab="atm" type="button">
+            <span class="tab-num">1</span> ATM Extractor
+        </button>
+        <button class="tab-btn" data-tab="convert" type="button">
+            <span class="tab-num">2</span> Chuyển không dấu
+        </button>
+        
+    </nav>
+
+    <main>
+        <div class="tab-panel active" id="tab-atm">
+            <iframe src="atm_extractor.html" title="ATM Extractor"></iframe>
+        </div>
+        <div class="tab-panel" id="tab-convert">
+            <iframe src="chuyen_doi_khong_dau.html" title="Chuyển không dấu & tách địa chỉ"></iframe>
+        </div>
+        
+    </main>
+
+    <script>
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const panels = {
+            atm: document.getElementById('tab-atm'),
+            convert: document.getElementById('tab-convert'),
+            pdf: document.getElementById('tab-pdf')
+        };
+
+        tabBtns.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach((b) => b.classList.remove('active'));
+                btn.classList.add('active');
+                Object.values(panels).forEach((p) => p.classList.remove('active'));
+                panels[btn.dataset.tab].classList.add('active');
+            });
+        });
+
+        window.__atmMergeData = null;
+        window.__atmMergeDataTime = 0;
+
+        const iframes = document.querySelectorAll('iframe');
+        const broadcastToIframes = (data, time, except) => {
+            iframes.forEach((f) => {
+                if (f.contentWindow && f.contentWindow !== except) {
+                    try {
+                        f.contentWindow.postMessage(
+                            { type: 'ATM_SET_MERGE_DATA', payload: data, time: time },
+                            '*'
+                        );
+                    } catch (e) { }
+                }
+            });
+        };
+
+        window.addEventListener('message', (e) => {
+            const d = e.data;
+            if (!d || typeof d !== 'object') return;
+            if (d.type === 'ATM_SET_MERGE_DATA') {
+                window.__atmMergeData = (d.payload && Array.isArray(d.payload)) ? d.payload : null;
+                window.__atmMergeDataTime = d.time || 0;
+                broadcastToIframes(window.__atmMergeData, window.__atmMergeDataTime, e.source);
+            } else if (d.type === 'ATM_GET_MERGE_DATA') {
+                if (e.source) {
+                    try {
+                        e.source.postMessage(
+                            { type: 'ATM_SET_MERGE_DATA', payload: window.__atmMergeData, time: window.__atmMergeDataTime },
+                            '*'
+                        );
+                    } catch (e2) { }
+                }
+            }
+        });
+    </script>
+</body>
+</html>
