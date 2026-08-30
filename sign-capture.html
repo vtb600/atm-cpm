@@ -668,15 +668,13 @@
         // ==================== SELECTION MODE ====================
         function updateRegionState() {
             clearSelBtn.disabled = !(isSelectMode && selections.length > 0);
-            captureBtn.disabled = !(isSelectMode && selections.length === MAX_SELECTIONS);
+            captureBtn.disabled = !(isSelectMode && selections.length > 0);
 
             if (!isSelectMode) return;
             if (selections.length === 0) {
                 modeIndicator.textContent = '✂️ Khoanh vùng 1 - kéo chuột để khoanh';
-            } else if (selections.length < MAX_SELECTIONS) {
-                modeIndicator.textContent = `✂️ Đã khoanh ${selections.length}/${MAX_SELECTIONS} - kéo chuột khoanh vùng ${selections.length + 1}`;
             } else {
-                modeIndicator.textContent = `✂️ Đã đủ ${MAX_SELECTIONS} vùng - bấm Chụp Ảnh`;
+                modeIndicator.textContent = `✂️ Đã khoanh ${selections.length} vùng - bấm Chụp Ảnh để lưu`;
             }
         }
 
@@ -825,8 +823,8 @@
         }
 
         captureBtn.addEventListener('click', async () => {
-            if (!isSelectMode || selections.length < MAX_SELECTIONS) {
-                showToast(`Vui lòng khoanh đủ ${MAX_SELECTIONS} vùng rồi bấm Chụp Ảnh!`);
+            if (!isSelectMode || selections.length === 0) {
+                showToast('Vui lòng khoanh ít nhất 1 vùng rồi bấm Chụp Ảnh!');
                 return;
             }
 
