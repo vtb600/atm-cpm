@@ -290,6 +290,7 @@
             height: 100%;
             cursor: crosshair;
             z-index: 10;
+            touch-action: none;
         }
 
         .selection-box {
@@ -714,18 +715,27 @@
 
         selectModeBtn.addEventListener('click', toggleSelectMode);
 
-        // ==================== MOUSE SELECTION ====================
-        selectionOverlay.addEventListener('mousedown', (e) => {
+        // ==================== POINTER SELECTION (mouse + touch) ====================
+        function getPointerPos(e) {
+            const rect = selectionOverlay.getBoundingClientRect();
+            return {
+                x: e.clientX - rect.left,
+                y: e.clientY - rect.top
+            };
+        }
+
+        selectionOverlay.addEventListener('pointerdown', (e) => {
             if (!isSelectMode) return;
             if (selections.length >= MAX_SELECTIONS) {
                 showToast(`Đã đủ ${MAX_SELECTIONS} vùng. Bấm Chụp Ảnh!`);
                 return;
             }
 
+            selectionOverlay.setPointerCapture(e.pointerId);
             isSelecting = true;
-            const rect = selectionOverlay.getBoundingClientRect();
-            selectionStart.x = e.clientX - rect.left;
-            selectionStart.y = e.clientY - rect.top;
+            const pos = getPointerPos(e);
+            selectionStart.x = pos.x;
+            selectionStart.y = pos.y;
 
             selectionBox.style.left = selectionStart.x + 'px';
             selectionBox.style.top = selectionStart.y + 'px';
@@ -734,17 +744,14 @@
             selectionBox.style.display = 'block';
         });
 
-        selectionOverlay.addEventListener('mousemove', (e) => {
+        selectionOverlay.addEventListener('pointermove', (e) => {
             if (!isSelecting) return;
 
-            const rect = selectionOverlay.getBoundingClientRect();
-            const currentX = e.clientX - rect.left;
-            const currentY = e.clientY - rect.top;
-
-            const x = Math.min(selectionStart.x, currentX);
-            const y = Math.min(selectionStart.y, currentY);
-            const width = Math.abs(currentX - selectionStart.x);
-            const height = Math.abs(currentY - selectionStart.y);
+            const pos = getPointerPos(e);
+            const x = Math.min(selectionStart.x, pos.x);
+            const y = Math.min(selectionStart.y, pos.y);
+            const width = Math.abs(pos.x - selectionStart.x);
+            const height = Math.abs(pos.y - selectionStart.y);
 
             selectionBox.style.left = x + 'px';
             selectionBox.style.top = y + 'px';
@@ -752,9 +759,12 @@
             selectionBox.style.height = height + 'px';
         });
 
-        selectionOverlay.addEventListener('mouseup', (e) => {
+        selectionOverlay.addEventListener('pointerup', (e) => {
             if (!isSelecting) return;
             isSelecting = false;
+            if (selectionOverlay.hasPointerCapture(e.pointerId)) {
+                selectionOverlay.releasePointerCapture(e.pointerId);
+            }
 
             const boxStyle = selectionBox.style;
             const w = parseInt(boxStyle.width);
@@ -767,6 +777,11 @@
             }
 
             finalizeSelection(parseInt(boxStyle.left), parseInt(boxStyle.top), w, h);
+        });
+
+        selectionOverlay.addEventListener('pointercancel', () => {
+            isSelecting = false;
+            selectionBox.style.display = 'none';
         });
 
         clearSelBtn.addEventListener('click', () => {
