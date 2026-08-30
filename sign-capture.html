@@ -580,11 +580,13 @@
             canvasContainer.style.width = viewport.width + 'px';
             canvasContainer.style.height = viewport.height + 'px';
 
-            // Clear previous selection
+            // Show selection boxes belonging to the current page, hide others
             selectionBox.style.display = 'none';
-            if (selections.length > 0) {
-                clearSelections();
-            }
+            selections.forEach(s => {
+                if (s.el) {
+                    s.el.style.display = (s.page === currentPage) ? 'block' : 'none';
+                }
+            });
 
             await page.render({
                 canvasContext: ctx,
@@ -593,11 +595,6 @@
 
             document.getElementById('pageInput').value = currentPage;
             document.getElementById('totalPages').textContent = totalPages;
-
-            // Clear selection mode when changing page
-            if (isSelectMode) {
-                toggleSelectMode();
-            }
         }
 
         // ==================== PAGE NAVIGATION ====================
@@ -702,7 +699,7 @@
             el.innerHTML = `<span class="region-label">Vùng ${selections.length + 1}</span>`;
             canvasContainer.appendChild(el);
 
-            selections.push({ x, y, w, h, el });
+            selections.push({ x, y, w, h, el, page: currentPage });
             updateRegionState();
         }
 
@@ -843,9 +840,28 @@
                 return;
             }
 
-            const done = [];
+            const originalPage = currentPage;
+            const byPage = {};
             for (const sel of selections) {
-                done.push(await captureRegion(sel));
+                const pg = sel.page || currentPage;
+                if (!byPage[pg]) byPage[pg] = [];
+                byPage[pg].push(sel);
+            }
+
+            const done = [];
+            for (const pg of Object.keys(byPage).map(Number).sort((a, b) => a - b)) {
+                if (pg !== currentPage) {
+                    currentPage = pg;
+                    await renderPage(pg);
+                }
+                for (const sel of byPage[pg]) {
+                    done.push(await captureRegion(sel));
+                }
+            }
+
+            if (currentPage !== originalPage) {
+                currentPage = originalPage;
+                await renderPage(originalPage);
             }
 
             updateCaptureList();
